@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::process::Command;
 
+use linked_hash_map::LinkedHashMap;
+
 use crate::workflow::{Job, Container, Step};
 
 #[derive(PartialEq)]
@@ -14,7 +16,7 @@ pub enum JobStatus {
 }
 
 /// Analyze "jobs" key of workflow and execute jobs in order
-pub fn do_jobs(jobs: HashMap<String, Job>, mut jobs_status: HashMap<String, JobStatus>) -> Result<HashMap<String, JobStatus>, String> {
+pub fn do_jobs(jobs: LinkedHashMap<String, Job>, mut jobs_status: HashMap<String, JobStatus>) -> Result<HashMap<String, JobStatus>, String> {
     // skip if job needs another one which already run and failed
     for (name, job) in jobs.iter() {
         jobs_status.insert(name.to_owned(), JobStatus::NoStatus);
@@ -22,7 +24,10 @@ pub fn do_jobs(jobs: HashMap<String, Job>, mut jobs_status: HashMap<String, JobS
         match &job.needs {
             Some(needs) => {
                 for need in needs.iter() {
-                    if jobs_status[need] == JobStatus::Failed {
+                    if ! jobs_status.contains_key(need) {
+                        println!("[WARNING] Job {} requires {} but this was not scheduled yet! Skipping check!", name, need);
+                    }
+                    else if jobs_status[need] == JobStatus::Failed {
                         println!("[WARNING] Skipping job {} because of failed dependency {}", name, need);
                         skip = true;
                         break;

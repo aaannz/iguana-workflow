@@ -4,6 +4,8 @@ use std::fs;
 use std::path::Path;
 use std::process::exit;
 
+use crate::workflow::do_workflow;
+
 mod workflow;
 
 #[derive(Parser, Debug)]
@@ -34,7 +36,7 @@ fn main() {
     }
 
     let workflow_data = fs::read_to_string(workflow_file).expect("Unable to open workflow file");
-    if let Err(e) = workflow::do_workflow(workflow_data) {
+    if let Err(e) = do_workflow(workflow_data) {
         println!("{}", e);
         exit(1);
     } else {

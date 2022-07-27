@@ -3,7 +3,10 @@
 use serde::Deserialize;
 
 use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::option::Option;
+
+use linked_hash_map::LinkedHashMap;
 
 mod job;
 
@@ -38,7 +41,7 @@ pub struct Job {
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Workflow {
     name: Option<String>,
-    jobs: HashMap<String, Job>,
+    jobs: LinkedHashMap<String, Job>,
     env: Option<HashMap<String, String>>
 }
 
