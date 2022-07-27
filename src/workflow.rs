@@ -1,23 +1,23 @@
 /// Implementation of Iguana workflow parsing
 
 use serde::Deserialize;
+use linked_hash_map::LinkedHashMap;
+use log::{info};
 
 use std::collections::HashMap;
 use std::option::Option;
 
-use linked_hash_map::LinkedHashMap;
-
 mod job;
 
 /// Container
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Deserialize)]
 pub struct Container {
     image: String,
     env: Option<HashMap<String, String>>
 }
 
 /// Step
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Deserialize)]
 pub struct Step {
     name: Option<String>,
     run: String,
@@ -26,7 +26,7 @@ pub struct Step {
     env: Option<HashMap<String, String>>
 }
 /// Job
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Deserialize)]
 pub struct Job {
     container: Container,
     services: Option<HashMap<String, Container>>,
@@ -37,7 +37,7 @@ pub struct Job {
 }
 
 /// Workflow
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Deserialize)]
 pub struct Workflow {
     name: Option<String>,
     jobs: LinkedHashMap<String, Job>,
@@ -50,22 +50,22 @@ pub fn do_workflow(workflow: String) -> Result<(), String> {
     let yaml = match yaml_result {
         Ok(r) => r,
         Err(e) => {
-            return Err(format!("[ERROR] Unable to parse provided workflow file: {}", e));
+            return Err(format!("Unable to parse provided workflow file: {}", e));
         }
     };
  
-    println!("Loaded control {}", yaml.name.unwrap_or("file".to_owned()));
+    info!("Loaded {}", yaml.name.unwrap_or("control file".to_owned()));
 
     let jobs = yaml.jobs;
 
     if jobs.is_empty() {
-        return Err("[ERROR] No jobs in control file!".to_owned());
+        return Err("No jobs in control file!".to_owned());
     }
 
-    let job_results = job::do_jobs(jobs, HashMap::new());
+    let job_results = job::do_jobs(jobs, HashMap::new(), &yaml.env);
 
     match job_results {
-        Ok(_) => println!("Workflow ran successfuly"),
+        Ok(_) => info!("Workflow ran successfuly"),
         Err(e) => return Err(e)
     };
     Ok(())

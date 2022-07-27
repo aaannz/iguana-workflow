@@ -1,4 +1,6 @@
 use clap::Parser;
+use env_logger::Env;
+use log::{error, info};
 
 use std::fs;
 use std::path::Path;
@@ -24,22 +26,23 @@ struct Args {
 /// Tracking results of individual job runs
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args = Args::parse();
 
     let workflow_file = args.workflow;
     // Is workflow URL or file
-    println!("Using workflow file {}", workflow_file);
+    info!("Using workflow file {}", workflow_file);
     if !Path::is_file(Path::new(&workflow_file)) {
-        println!("[ERROR] No such file: {}", workflow_file);
+        error!("No such file: {}", workflow_file);
         exit(1);
     }
 
     let workflow_data = fs::read_to_string(workflow_file).expect("Unable to open workflow file");
     if let Err(e) = do_workflow(workflow_data) {
-        println!("{}", e);
+        error!("{}", e);
         exit(1);
     } else {
-        println!("Iguana workflow finished successfuly");
+        info!("Iguana workflow finished successfuly");
         exit(0);
     }
 }
