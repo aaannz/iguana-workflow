@@ -4,8 +4,9 @@ use std::collections::HashMap;
 use std::process::Command;
 
 use linked_hash_map::LinkedHashMap;
+use log::{error, warn, debug};
 
-use crate::workflow::{Job, Container, Step};
+use crate::workflow::Job;
 
 #[derive(PartialEq)]
 pub enum JobStatus {
@@ -15,8 +16,14 @@ pub enum JobStatus {
     Failed
 }
 
+fn merge_from_ref(map: &mut HashMap<String, String>, map2: &HashMap<String, String>) {
+    map.extend(map2.into_iter().map(|(k, v)| (k.clone(), v.clone())));
+}
+
 /// Analyze "jobs" key of workflow and execute jobs in order
-pub fn do_jobs(jobs: LinkedHashMap<String, Job>, mut jobs_status: HashMap<String, JobStatus>) -> Result<HashMap<String, JobStatus>, String> {
+pub fn do_jobs(jobs: LinkedHashMap<String, Job>,
+    mut jobs_status: HashMap<String, JobStatus>,
+    env: &Option<HashMap<String, String>>) -> Result<HashMap<String, JobStatus>, String> {
     // skip if job needs another one which already run and failed
     for (name, job) in jobs.iter() {
         jobs_status.insert(name.to_owned(), JobStatus::NoStatus);
@@ -25,10 +32,10 @@ pub fn do_jobs(jobs: LinkedHashMap<String, Job>, mut jobs_status: HashMap<String
             Some(needs) => {
                 for need in needs.iter() {
                     if ! jobs_status.contains_key(need) {
-                        println!("[WARNING] Job {} requires {} but this was not scheduled yet! Skipping check!", name, need);
+                        warn!("Job {} requires {} but this was not scheduled yet! Skipping check!", name, need);
                     }
                     else if jobs_status[need] == JobStatus::Failed {
-                        println!("[WARNING] Skipping job {} because of failed dependency {}", name, need);
+                        warn!("Skipping job {} because of failed dependency {}", name, need);
                         skip = true;
                         break;
                     }
@@ -41,7 +48,7 @@ pub fn do_jobs(jobs: LinkedHashMap<String, Job>, mut jobs_status: HashMap<String
             continue;
         }
         
-        match do_job(name, job) {
+        match do_job(name, job, env) {
             Ok(()) => {
                 jobs_status.insert(name.to_owned(), JobStatus::Success);
             }
@@ -62,13 +69,15 @@ fn prepare_image(image: &String) -> Result<(), String> {
         .args(["image", "pull", "--tls-verify=false", "--"])
         .arg(&image);
 
+    debug!("{cmd:?}");
+
     if let Err(e) = cmd.output() {
         return Err(e.to_string())
     }
     Ok(())
 }
 
-fn run_container(name: &String, is_service: bool, env: &Option<HashMap<String, String>>) -> Result<(), String> {
+fn run_container(name: &String, is_service: bool, env: HashMap<String, String>) -> Result<(), String> {
     let mut podman = Command::new("podman");
     let mut cmd = podman
         .args(["run", "--rm", "--network=host", "--annotation=iguana=true", "--env=iguana=true"])
@@ -81,16 +90,13 @@ fn run_container(name: &String, is_service: bool, env: &Option<HashMap<String, S
         cmd = cmd.arg("--detach");
     }
 
-    match env {
-        Some(envs)=> {
-            for (k, v) in envs.iter() {
-                cmd.arg(format!("--env={}={}", k, v));
-            }
-        }
-        None => {}
+    for (k, v) in env.iter() {
+        cmd.arg(format!("--env={}={}", k, v));
     }
 
     cmd = cmd.args(["--", name]);
+
+    debug!("{cmd:?}");
 
     if let Err(e) = cmd.output() {
         return Err(e.to_string())
@@ -98,13 +104,13 @@ fn run_container(name: &String, is_service: bool, env: &Option<HashMap<String, S
     Ok(())
 }
 
-fn do_job(name: &String, job: &Job) -> Result<(), String> {
+fn do_job(name: &String, job: &Job, env_inherited: &Option<HashMap<String, String>>) -> Result<(), String> {
     let image = &job.container.image;
 
     if image.len() == 0 {
-        return Err(format!("[ERROR] No image specified for job {}", name))
+        return Err(format!("No image specified for job {}", name))
     }
-    println!("[DEBUG] running job {}", name);
+    debug!("Running job {}", name);
     let mut services_ok = true;
     // Prepare and run services
     match &job.services {
@@ -113,15 +119,22 @@ fn do_job(name: &String, job: &Job) -> Result<(), String> {
                 match prepare_image(&s_container.image) {
                     Ok(()) => (),
                     Err(e) => {
-                        println!("[ERROR] Preparation of service container '{}' failed: {}", s_name, e);
+                        error!("Preparation of service container '{}' failed: {}", s_name, e);
                         services_ok = false;
                         continue;
                     }
                 }
-                match run_container(&s_container.image, true, &s_container.env) {
-                    Ok(()) => println!("[DEBUG] Service '{}' started", s_name),
+                let mut env: HashMap<String, String> = HashMap::new();
+                if env_inherited.is_some() {
+                    merge_from_ref(&mut env, env_inherited.as_ref().unwrap());
+                }
+                if s_container.env.is_some() {
+                    merge_from_ref(&mut env, s_container.env.as_ref().unwrap());
+                }
+                match run_container(&s_container.image, true, env) {
+                    Ok(()) => debug!("Service '{}' started", s_name),
                     Err(e) => {
-                        println!("[ERROR] Service container '{}' start failed: {}", s_name, e);
+                        error!("Service container '{}' start failed: {}", s_name, e);
                         services_ok = false;
                     }
                 }
@@ -131,20 +144,30 @@ fn do_job(name: &String, job: &Job) -> Result<(), String> {
     }
 
     if !services_ok {
-        return Err(format!("[ERROR] Service container for job '{}' failed", name))
+        return Err(format!("Service container for job '{}' failed", name))
     }
 
     // Start main job
     match prepare_image(image) {
         Ok(()) => (),
         Err(e) => {
-            return Err(format!("[ERROR] Preparation of container '{}' failed: {}", name, e))
+            return Err(format!("Preparation of container '{}' failed: {}", name, e))
         }
     }
-    match run_container(image, false, &job.container.env) {
-        Ok(()) => println!("[DEBUG] Job container '{}' started", image),
+    // Merge inherited and job specific environment
+    let mut env: HashMap<String, String> = HashMap::new();
+    if env_inherited.is_some() {
+        let e = env_inherited.as_ref().unwrap();
+        merge_from_ref(&mut env, e);
+    }
+    if job.container.env.is_some() {
+        let e = job.container.env.as_ref().unwrap();
+        merge_from_ref(&mut env, e);
+    }
+    match run_container(image, false, env) {
+        Ok(()) => debug!("Job container '{}' started", image),
         Err(e) => {
-            return Err(format!("[ERROR] Job container '{}' start failed: {}", image, e));
+            return Err(format!("Job container '{}' start failed: {}", image, e));
          }
     }
 
