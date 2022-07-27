@@ -23,7 +23,6 @@ struct Args {
 
 /// Tracking results of individual job runs
 
-
 fn main() {
     let args = Args::parse();
 

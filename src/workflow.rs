@@ -3,7 +3,6 @@
 use serde::Deserialize;
 
 use std::collections::HashMap;
-use std::collections::BTreeMap;
 use std::option::Option;
 
 use linked_hash_map::LinkedHashMap;
@@ -29,7 +28,7 @@ pub struct Step {
 /// Job
 #[derive(Debug, PartialEq, Deserialize)]
 pub struct Job {
-    container: String,
+    container: Container,
     services: Option<HashMap<String, Container>>,
     needs: Option<Vec<String>>,
     steps: Option<Vec<Step>>,

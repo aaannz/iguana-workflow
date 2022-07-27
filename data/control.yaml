@@ -2,12 +2,14 @@ name: Test installation control YAML
 
 jobs:
   dinstaller:
-    container: registry.opensuse.org/yast/head/containers/containers_tumbleweed/opensuse/dinstaller-web
+    container:
+      image: registry.opensuse.org/yast/head/containers/containers_tumbleweed/opensuse/dinstaller-web
     services:
       backend:
         image: registry.opensuse.org/yast/head/containers/containers_tumbleweed/opensuse/dinstaller-backend
   busybox:
-    container: registry.opensuse.org/opensuse/busybox:latest
+    container:
+      image: registry.opensuse.org/opensuse/busybox:latest
     needs:
       - dinstaller
     steps:
