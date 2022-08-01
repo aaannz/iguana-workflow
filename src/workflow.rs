@@ -44,7 +44,12 @@ pub struct Workflow {
     env: Option<HashMap<String, String>>
 }
 
-pub fn do_workflow(workflow: String) -> Result<(), String> {
+pub struct WorkflowOptions {
+    pub dry_run: bool,
+    pub debug:   bool
+}
+
+pub fn do_workflow(workflow: String, opts: &WorkflowOptions) -> Result<(), String> {
     let yaml_result: Result<Workflow, _> = serde_yaml::from_str(&workflow);
 
     let yaml = match yaml_result {
@@ -62,7 +67,7 @@ pub fn do_workflow(workflow: String) -> Result<(), String> {
         return Err("No jobs in control file!".to_owned());
     }
 
-    let job_results = job::do_jobs(jobs, HashMap::new(), &yaml.env);
+    let job_results = job::do_jobs(jobs, HashMap::new(), &yaml.env, opts);
 
     match job_results {
         Ok(_) => info!("Workflow ran successfuly"),
