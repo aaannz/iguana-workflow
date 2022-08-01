@@ -8,6 +8,7 @@ use log::{error, warn, debug};
 
 use crate::workflow::{Job, WorkflowOptions};
 
+/// Available results of container run
 #[derive(PartialEq)]
 pub enum JobStatus {
     NoStatus,
@@ -18,50 +19,6 @@ pub enum JobStatus {
 
 fn merge_from_ref(map: &mut HashMap<String, String>, map2: &HashMap<String, String>) {
     map.extend(map2.into_iter().map(|(k, v)| (k.clone(), v.clone())));
-}
-
-/// Analyze "jobs" key of workflow and execute jobs in order
-pub fn do_jobs(jobs: LinkedHashMap<String, Job>,
-    mut jobs_status: HashMap<String, JobStatus>,
-    env: &Option<HashMap<String, String>>,
-    opts: &WorkflowOptions) -> Result<HashMap<String, JobStatus>, String> {
-    // skip if job needs another one which already run and failed
-    for (name, job) in jobs.iter() {
-        jobs_status.insert(name.to_owned(), JobStatus::NoStatus);
-        let mut skip = false;
-        match &job.needs {
-            Some(needs) => {
-                for need in needs.iter() {
-                    if ! jobs_status.contains_key(need) {
-                        warn!("Job {} requires {} but this was not scheduled yet! Skipping check!", name, need);
-                    }
-                    else if jobs_status[need] == JobStatus::Failed {
-                        warn!("Skipping job {} because of failed dependency {}", name, need);
-                        skip = true;
-                        break;
-                    }
-                }
-            }
-            None => {}
-        }
-        if skip {
-            jobs_status.insert(name.to_owned(), JobStatus::Skipped);
-            continue;
-        }
-        
-        match do_job(name, job, env, opts) {
-            Ok(()) => {
-                jobs_status.insert(name.to_owned(), JobStatus::Success);
-            }
-            Err(e) => {
-                jobs_status.insert(name.to_owned(), JobStatus::Failed);
-                if !job.continue_on_error {
-                    return Err(e);
-                }
-            }
-        }
-    }
-    Ok(jobs_status)
 }
 
 fn prepare_image(image: &String, dry_run: bool) -> Result<(), String> {
@@ -181,4 +138,48 @@ fn do_job(name: &String, job: &Job, env_inherited: &Option<HashMap<String, Strin
     }
 
     Ok(())
+}
+
+/// Analyze "jobs" key of workflow and execute jobs in order
+pub fn do_jobs(jobs: LinkedHashMap<String, Job>,
+    mut jobs_status: HashMap<String, JobStatus>,
+    env: &Option<HashMap<String, String>>,
+    opts: &WorkflowOptions) -> Result<HashMap<String, JobStatus>, String> {
+    // skip if job needs another one which already run and failed
+    for (name, job) in jobs.iter() {
+        jobs_status.insert(name.to_owned(), JobStatus::NoStatus);
+        let mut skip = false;
+        match &job.needs {
+            Some(needs) => {
+                for need in needs.iter() {
+                    if ! jobs_status.contains_key(need) {
+                        warn!("Job {} requires {} but this was not scheduled yet! Skipping check!", name, need);
+                    }
+                    else if jobs_status[need] == JobStatus::Failed {
+                        warn!("Skipping job {} because of failed dependency {}", name, need);
+                        skip = true;
+                        break;
+                    }
+                }
+            }
+            None => {}
+        }
+        if skip {
+            jobs_status.insert(name.to_owned(), JobStatus::Skipped);
+            continue;
+        }
+
+        match do_job(name, job, env, opts) {
+            Ok(()) => {
+                jobs_status.insert(name.to_owned(), JobStatus::Success);
+            }
+            Err(e) => {
+                jobs_status.insert(name.to_owned(), JobStatus::Failed);
+                if !job.continue_on_error {
+                    return Err(e);
+                }
+            }
+        }
+    }
+    Ok(jobs_status)
 }
