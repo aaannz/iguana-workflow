@@ -14,26 +14,26 @@ mod workflow;
 #[clap(version, about, long_about = None)]
 /// Prepare, run and collect iguana containers based on passed iguana workflow file
 struct Args {
-   /// File with iguana workflow
-   #[clap(short = 'f', long, value_parser, default_value = "control.yaml")]
-   workflow: String,
+    /// File with iguana workflow
+    #[clap(short = 'f', long, value_parser, default_value = "control.yaml")]
+    workflow: String,
 
-   /// Newroot mount directory
-   #[clap(short, long, value_parser, default_value = "/sysroot")]
-   newroot: String,
+    /// Newroot mount directory
+    #[clap(short, long, value_parser, default_value = "/sysroot")]
+    newroot: String,
 
-   /// Do not run any action
-   #[clap(long, takes_value = false)]
-   dry_run: bool,
+    /// Do not run any action
+    #[clap(long, takes_value = false)]
+    dry_run: bool,
 
-   /// Log level
-   #[clap(long, default_value = "info", value_parser)]
-   log_level: String,
+    /// Log level
+    #[clap(long, default_value = "info", value_parser)]
+    log_level: String,
 
-   /// Container debugging
-   /// If enabled, containers and their images will not be removed after run
-   #[clap(long, takes_value = false)]
-   debug: bool,
+    /// Container debugging
+    /// If enabled, containers and their images will not be removed after run
+    #[clap(long, takes_value = false)]
+    debug: bool,
 }
 
 /// Tracking results of individual job runs
@@ -53,8 +53,8 @@ fn main() {
     let workflow_data = fs::read_to_string(workflow_file).expect("Unable to open workflow file");
 
     let opts = WorkflowOptions {
-        debug:    args.debug,
-        dry_run:  args.dry_run
+        debug: args.debug,
+        dry_run: args.dry_run,
     };
 
     if let Err(e) = do_workflow(workflow_data, &opts) {

@@ -1,8 +1,7 @@
-/// Implementation of Iguana workflow parsing
-
-use serde::Deserialize;
 use linked_hash_map::LinkedHashMap;
-use log::{info};
+use log::info;
+/// Implementation of Iguana workflow parsing
+use serde::Deserialize;
 
 use std::collections::HashMap;
 use std::option::Option;
@@ -13,7 +12,7 @@ mod job;
 #[derive(Deserialize)]
 pub struct Container {
     image: String,
-    env: Option<HashMap<String, String>>
+    env: Option<HashMap<String, String>>,
 }
 
 /// Step
@@ -23,7 +22,7 @@ pub struct Step {
     run: String,
     uses: Option<String>,
     with: Option<String>,
-    env: Option<HashMap<String, String>>
+    env: Option<HashMap<String, String>>,
 }
 /// Job
 #[derive(Deserialize)]
@@ -33,7 +32,7 @@ pub struct Job {
     needs: Option<Vec<String>>,
     steps: Option<Vec<Step>>,
     #[serde(default)]
-    continue_on_error: bool
+    continue_on_error: bool,
 }
 
 /// Workflow
@@ -41,12 +40,12 @@ pub struct Job {
 pub struct Workflow {
     name: Option<String>,
     jobs: LinkedHashMap<String, Job>,
-    env: Option<HashMap<String, String>>
+    env: Option<HashMap<String, String>>,
 }
 
 pub struct WorkflowOptions {
     pub dry_run: bool,
-    pub debug:   bool
+    pub debug: bool,
 }
 
 pub fn do_workflow(workflow: String, opts: &WorkflowOptions) -> Result<(), String> {
@@ -58,7 +57,7 @@ pub fn do_workflow(workflow: String, opts: &WorkflowOptions) -> Result<(), Strin
             return Err(format!("Unable to parse provided workflow file: {}", e));
         }
     };
- 
+
     info!("Loaded {}", yaml.name.unwrap_or("control file".to_owned()));
 
     let jobs = yaml.jobs;
@@ -71,7 +70,7 @@ pub fn do_workflow(workflow: String, opts: &WorkflowOptions) -> Result<(), Strin
 
     match job_results {
         Ok(_) => info!("Workflow ran successfuly"),
-        Err(e) => return Err(e)
+        Err(e) => return Err(e),
     };
     Ok(())
 }
