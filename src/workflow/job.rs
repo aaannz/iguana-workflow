@@ -24,11 +24,9 @@ fn merge_from_ref(map: &mut HashMap<String, String>, map2: &HashMap<String, Stri
 fn prepare_image(image: &String, dry_run: bool) -> Result<(), String> {
     let mut podman = Command::new("podman");
     let cmd = podman
-        .args(["image", "pull", "--tls-verify=false", "--"])
-        .arg(&image);
+        .args(["image", "pull", "--tls-verify=false", "--", image]);
 
     debug!("{cmd:?}");
-
     if !dry_run {
         if let Err(e) = cmd.output() {
             return Err(e.to_string())
@@ -37,7 +35,27 @@ fn prepare_image(image: &String, dry_run: bool) -> Result<(), String> {
     Ok(())
 }
 
-fn run_container(name: &String, is_service: bool, env: HashMap<String, String>, dry_run: bool, debug: bool) -> Result<(), String> {
+/// Clean container images
+fn clean_image(image: &String, opts: &WorkflowOptions) -> Result<(), String> {
+    if opts.debug {
+        debug!("Not cleaning job image {image} because of debug option");
+        return Ok(());
+    }
+
+    let mut podman = Command::new("podman");
+    let mut cmd = podman
+        .args(["image", "rm", "--force", "--ignore", "--", image]);
+
+    debug!("{cmd:?}");
+    if !opts.dry_run {
+        if let Err(e) = cmd.output() {
+            return Err(e.to_string())
+        }
+    }
+    Ok(())
+}
+
+fn run_container(name: &String, is_service: bool, env: HashMap<String, String>, opts: &WorkflowOptions) -> Result<(), String> {
     let mut podman = Command::new("podman");
     let mut cmd = podman
         .args(["run", "--network=host", "--annotation=iguana=true", "--env=iguana=true"])
@@ -50,7 +68,7 @@ fn run_container(name: &String, is_service: bool, env: HashMap<String, String>, 
         cmd = cmd.arg("--detach");
     }
 
-    if !debug {
+    if !opts.debug {
         cmd = cmd.arg("--rm");
     }
 
@@ -61,8 +79,21 @@ fn run_container(name: &String, is_service: bool, env: HashMap<String, String>, 
     cmd = cmd.args(["--", name]);
 
     debug!("{cmd:?}");
+    if !opts.dry_run {
+        if let Err(e) = cmd.output() {
+            return Err(e.to_string())
+        }
+    }
+    Ok(())
+}
 
-    if !dry_run {
+fn stop_container(name: &String, opts: &WorkflowOptions) -> Result<(), String> {
+    let mut podman = Command::new("podman");
+    let mut cmd = podman
+        .args(["container", "--ignore", "--force", "--", name]);
+
+    debug!("{cmd:?}");
+    if !opts.dry_run {
         if let Err(e) = cmd.output() {
             return Err(e.to_string())
         }
@@ -97,7 +128,7 @@ fn do_job(name: &String, job: &Job, env_inherited: &Option<HashMap<String, Strin
                 if s_container.env.is_some() {
                     merge_from_ref(&mut env, s_container.env.as_ref().unwrap());
                 }
-                match run_container(&s_container.image, true, env, opts.dry_run, opts.debug) {
+                match run_container(&s_container.image, true, env, opts) {
                     Ok(()) => debug!("Service '{}' started", s_name),
                     Err(e) => {
                         error!("Service container '{}' start failed: {}", s_name, e);
@@ -130,12 +161,41 @@ fn do_job(name: &String, job: &Job, env_inherited: &Option<HashMap<String, Strin
         let e = job.container.env.as_ref().unwrap();
         merge_from_ref(&mut env, e);
     }
-    match run_container(image, false, env, opts.dry_run, opts.debug) {
+    match run_container(image, false, env, opts) {
         Ok(()) => debug!("Job container '{}' started", image),
         Err(e) => {
             return Err(format!("Job container '{}' start failed: {}", image, e));
          }
     }
+
+    Ok(())
+}
+
+fn clean_job(name: &String, job: &Job, opts: &WorkflowOptions) -> Result<(), String> {
+    // Stop service containers
+    match &job.services {
+        Some(services) => {
+            for (s_name, s_container) in services.iter() {
+                match stop_container(&s_container.image, opts) {
+                    Ok(()) => debug!("Service container '{s_name}' stopped"),
+                    Err(e) => {
+                        error!("Stopping of service container '{s_name}' failed: {e}");
+                    }
+                }
+
+                match clean_image(&s_container.image, opts) {
+                    Ok(()) => debug!("Service '{s_name}' image cleaned"),
+                    Err(e) => {
+                        error!("Service container '{s_name}' cleanup failed: {e}");
+                    }
+                }
+            }
+        }
+        None => {}
+    }
+
+    // Clean images
+    return clean_image(&job.container.image, opts);
 
     Ok(())
 }
@@ -153,10 +213,10 @@ pub fn do_jobs(jobs: LinkedHashMap<String, Job>,
             Some(needs) => {
                 for need in needs.iter() {
                     if ! jobs_status.contains_key(need) {
-                        warn!("Job {} requires {} but this was not scheduled yet! Skipping check!", name, need);
+                        warn!("Job {name} requires {need} but this was not scheduled yet! Skipping check!");
                     }
                     else if jobs_status[need] == JobStatus::Failed {
-                        warn!("Skipping job {} because of failed dependency {}", name, need);
+                        warn!("Skipping job {name} because of failed dependency {need}");
                         skip = true;
                         break;
                     }
@@ -180,6 +240,13 @@ pub fn do_jobs(jobs: LinkedHashMap<String, Job>,
                 }
             }
         }
+
+        match clean_job(name, job, opts) {
+            Ok(()) => {},
+            Err(e) => {
+                error!("Failed to clean job {name}");
+            }
+        };
     }
     Ok(jobs_status)
 }
