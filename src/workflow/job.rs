@@ -41,7 +41,7 @@ fn clean_image(image: &String, opts: &WorkflowOptions) -> Result<(), String> {
     }
 
     let mut podman = Command::new("podman");
-    let mut cmd = podman.args(["image", "rm", "--force", "--ignore", "--", image]);
+    let cmd = podman.args(["image", "rm", "--force", "--ignore", "--", image]);
 
     debug!("{cmd:?}");
     if !opts.dry_run {
@@ -102,7 +102,7 @@ fn run_container(
 
 fn stop_container(name: &String, opts: &WorkflowOptions) -> Result<(), String> {
     let mut podman = Command::new("podman");
-    let mut cmd = podman.args(["container", "stop", "--ignore", "--", name]);
+    let cmd = podman.args(["container", "stop", "--ignore", "--", name]);
 
     debug!("{cmd:?}");
     if !opts.dry_run {
@@ -189,7 +189,7 @@ fn do_job(
     Ok(())
 }
 
-fn clean_job(name: &String, job: &Job, opts: &WorkflowOptions) -> Result<(), String> {
+fn clean_job(job: &Job, opts: &WorkflowOptions) -> Result<(), String> {
     // Stop service containers
     match &job.services {
         Some(services) => {
@@ -214,8 +214,6 @@ fn clean_job(name: &String, job: &Job, opts: &WorkflowOptions) -> Result<(), Str
 
     // Clean images
     return clean_image(&job.container.image, opts);
-
-    Ok(())
 }
 
 /// Analyze "jobs" key of workflow and execute jobs in order
@@ -260,10 +258,10 @@ pub fn do_jobs(
             }
         }
 
-        match clean_job(name, job, opts) {
+        match clean_job(job, opts) {
             Ok(()) => {}
             Err(e) => {
-                error!("Failed to clean job {name}");
+                error!("Failed to clean job {name}: {e}");
             }
         };
     }
