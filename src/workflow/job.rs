@@ -26,7 +26,7 @@ fn prepare_image(image: &String, dry_run: bool) -> Result<(), String> {
 
     debug!("{cmd:?}");
     if !dry_run {
-        if let Err(e) = cmd.output() {
+        if let Err(e) = cmd.status() {
             return Err(e.to_string());
         }
     }
@@ -41,11 +41,11 @@ fn clean_image(image: &String, opts: &WorkflowOptions) -> Result<(), String> {
     }
 
     let mut podman = Command::new("podman");
-    let cmd = podman.args(["image", "rm", "--force", "--ignore", "--", image]);
+    let cmd = podman.args(["image", "rm", "--force", "--", image]);
 
     debug!("{cmd:?}");
     if !opts.dry_run {
-        if let Err(e) = cmd.output() {
+        if let Err(e) = cmd.status() {
             return Err(e.to_string());
         }
     }
@@ -93,7 +93,7 @@ fn run_container(
 
     debug!("{cmd:?}");
     if !opts.dry_run {
-        if let Err(e) = cmd.output() {
+        if let Err(e) = cmd.status() {
             return Err(e.to_string());
         }
     }
@@ -106,7 +106,7 @@ fn stop_container(name: &String, opts: &WorkflowOptions) -> Result<(), String> {
 
     debug!("{cmd:?}");
     if !opts.dry_run {
-        if let Err(e) = cmd.output() {
+        if let Err(e) = cmd.status() {
             return Err(e.to_string());
         }
     }
