@@ -5,7 +5,7 @@ use std::process::Command;
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, warn};
 
-use crate::workflow::{Job, WorkflowOptions};
+use crate::workflow::{Container, Job, WorkflowOptions};
 
 /// Available results of container run
 #[derive(PartialEq)]
@@ -53,26 +53,45 @@ fn clean_image(image: &String, opts: &WorkflowOptions) -> Result<(), String> {
 }
 
 fn run_container(
-    name: &String,
+    container: &Container,
     is_service: bool,
     env: HashMap<String, String>,
     opts: &WorkflowOptions,
 ) -> Result<(), String> {
+    // Prepare volumes if specified
+    let mut volumes = Vec::new();
+    if container.volumes.is_some() {
+        for v in container.volumes.as_ref().unwrap() {
+            let src = v.split(":").take(1).collect::<Vec<_>>()[0];
+            let mut podman = Command::new("podman");
+            let cmd = podman.args(
+                ["volume", "create", src]);
+            debug!("{cmd:?}");
+
+            if !opts.dry_run {
+                if let Err(e) = cmd.status() {
+                    return Err(e.to_string());
+                }
+            }
+            volumes.push(format!("--volume={v}"));
+        }
+    }
+    // Run the container
     let mut podman = Command::new("podman");
-    let mut cmd = podman
-        .args([
-            "run",
-            "--network=host",
-            "--annotation=iguana=true",
-            "--env=iguana=true",
-        ])
-        .args([
-            "--volume=/dev:/dev",
-            "--mount=type=bind,source=/iguana,target=/iguana",
-        ]);
+    let mut cmd = podman.args([
+        "run",
+        "--network=host",
+        "--annotation=iguana=true",
+        "--env=iguana=true",
+        "--mount=type=bind,source=/iguana,target=/iguana",
+    ]);
 
     if opts.privileged {
-        cmd = cmd.arg("--privileged");
+        cmd = cmd.args(["--volume=/dev:/dev", "--privileged"]);
+    }
+
+    if !volumes.is_empty() {
+        cmd = cmd.args(volumes);
     }
 
     if !is_service {
@@ -89,7 +108,7 @@ fn run_container(
         cmd.arg(format!("--env={}={}", k, v));
     }
 
-    cmd = cmd.args(["--", name]);
+    cmd = cmd.args(["--", &container.image]);
 
     debug!("{cmd:?}");
     if !opts.dry_run {
@@ -148,7 +167,7 @@ fn do_job(
                 if s_container.env.is_some() {
                     merge_from_ref(&mut env, s_container.env.as_ref().unwrap());
                 }
-                match run_container(&s_container.image, true, env, opts) {
+                match run_container(s_container, true, env, opts) {
                     Ok(()) => debug!("Service '{}' started", s_name),
                     Err(e) => {
                         error!("Service container '{}' start failed: {}", s_name, e);
@@ -179,7 +198,7 @@ fn do_job(
         let e = job.container.env.as_ref().unwrap();
         merge_from_ref(&mut env, e);
     }
-    match run_container(image, false, env, opts) {
+    match run_container(&job.container, false, env, opts) {
         Ok(()) => debug!("Job container '{}' started", image),
         Err(e) => {
             return Err(format!("Job container '{}' start failed: {}", image, e));

@@ -13,6 +13,7 @@ mod job;
 pub struct Container {
     image: String,
     env: Option<HashMap<String, String>>,
+    volumes: Option<Vec<String>>,
 }
 
 /// Step
