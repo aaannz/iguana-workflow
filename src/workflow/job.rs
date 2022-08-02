@@ -1,5 +1,5 @@
 /// Implementation of job execution
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Command;
 
 use linked_hash_map::LinkedHashMap;
@@ -64,8 +64,7 @@ fn run_container(
         for v in container.volumes.as_ref().unwrap() {
             let src = v.split(":").take(1).collect::<Vec<_>>()[0];
             let mut podman = Command::new("podman");
-            let cmd = podman.args(
-                ["volume", "create", src]);
+            let cmd = podman.args(["volume", "create", src]);
             debug!("{cmd:?}");
 
             if !opts.dry_run {
@@ -209,6 +208,8 @@ fn do_job(
 }
 
 fn clean_job(job: &Job, opts: &WorkflowOptions) -> Result<(), String> {
+    // Collect volumes throught cleanup so we can removed them at the end
+    let mut volumes = HashSet::new();
     // Stop service containers
     match &job.services {
         Some(services) => {
@@ -226,9 +227,36 @@ fn clean_job(job: &Job, opts: &WorkflowOptions) -> Result<(), String> {
                         error!("Service container '{s_name}' cleanup failed: {e}");
                     }
                 }
+
+                if s_container.volumes.is_some() {
+                    for v in s_container.volumes.as_ref().unwrap() {
+                        let src = v.split(":").take(1).collect::<Vec<_>>()[0];
+                        volumes.insert(src);
+                    }
+                }
             }
         }
         None => {}
+    }
+
+    if job.container.volumes.is_some() {
+        for v in job.container.volumes.as_ref().unwrap() {
+            let src = v.split(":").take(1).collect::<Vec<_>>()[0];
+            volumes.insert(src);
+        }
+    }
+
+    if !volumes.is_empty() {
+        let mut podman = Command::new("podman");
+        let mut cmd = podman.args(["volume", "remove"]);
+        cmd = cmd.args(volumes);
+
+        debug!("{cmd:?}");
+        if !opts.dry_run {
+            if let Err(e) = cmd.status() {
+                return Err(e.to_string());
+            }
+        }
     }
 
     // Clean images
