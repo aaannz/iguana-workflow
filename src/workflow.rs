@@ -46,6 +46,7 @@ pub struct Workflow {
 pub struct WorkflowOptions {
     pub dry_run: bool,
     pub debug: bool,
+    pub privileged: bool,
 }
 
 pub fn do_workflow(workflow: String, opts: &WorkflowOptions) -> Result<(), String> {

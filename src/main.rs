@@ -15,7 +15,7 @@ mod workflow;
 /// Prepare, run and collect iguana containers based on passed iguana workflow file
 struct Args {
     /// File with iguana workflow
-    #[clap(short = 'f', long, value_parser, default_value = "control.yaml")]
+    #[clap(value_parser, forbid_empty_values = true)]
     workflow: String,
 
     /// Newroot mount directory
@@ -34,6 +34,10 @@ struct Args {
     /// If enabled, containers and their images will not be removed after run
     #[clap(long, takes_value = false)]
     debug: bool,
+
+    /// Run privileged containers
+    #[clap(short, long, takes_value = false)]
+    unprivileged: bool,
 }
 
 /// Tracking results of individual job runs
@@ -55,6 +59,7 @@ fn main() {
     let opts = WorkflowOptions {
         debug: args.debug,
         dry_run: args.dry_run,
+        privileged: !args.unprivileged,
     };
 
     if let Err(e) = do_workflow(workflow_data, &opts) {

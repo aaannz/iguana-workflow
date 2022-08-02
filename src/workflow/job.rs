@@ -71,6 +71,10 @@ fn run_container(
             "--mount=type=bind,source=/iguana,target=/iguana",
         ]);
 
+    if opts.privileged {
+        cmd = cmd.arg("--privileged");
+    }
+
     if !is_service {
         cmd = cmd.args(["--tty", "--interactive"]);
     } else {
@@ -98,7 +102,7 @@ fn run_container(
 
 fn stop_container(name: &String, opts: &WorkflowOptions) -> Result<(), String> {
     let mut podman = Command::new("podman");
-    let mut cmd = podman.args(["container", "--ignore", "--force", "--", name]);
+    let mut cmd = podman.args(["container", "stop", "--ignore", "--", name]);
 
     debug!("{cmd:?}");
     if !opts.dry_run {
