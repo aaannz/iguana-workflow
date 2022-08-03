@@ -6,7 +6,22 @@ Implementation of iguana workflow parser. Iguana workflow is a YAML document loo
 
 ## Usage
 
-Use `cargo run -- --dry-run --log-level=debug workflow_file` for testing.
+### Building
+
+To build the tool you will need rust 2021 edition (v1.56 and newer) and related cargo binary.
+
+```
+git clone https://github.com/aaannz/iguana-workflow
+cd iguana-workflow
+cargo build
+```
+
+To build release target use
+```
+cargo build --release
+```
+
+For quick testing use `cargo run -- --dry-run --log-level=debug workflow_file`.
 
 See `iguana-workflow --help` for complete argument overview.
 
@@ -18,6 +33,6 @@ Log level can be set either by using `--log-level` option or using `RUST_LOG=deb
 
 Use `--dry-run` together with `--log-level` to see what iguana-workflow would do based on provided workflow yaml file.
 
-## Building
+## Workflow syntax
 
-Use `cargo build` as usual
+See [workflow syntax overview](workflow.md) for details about workflow file.
