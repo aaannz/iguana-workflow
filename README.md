@@ -35,4 +35,4 @@ Use `--dry-run` together with `--log-level` to see what iguana-workflow would do
 
 ## Workflow syntax
 
-See [workflow syntax overview](workflow.md) for details about workflow file.
+See [workflow syntax overview](Workflow.md) for details about workflow file.
