@@ -8,8 +8,8 @@ use std::process::exit;
 
 use crate::workflow::{do_workflow, WorkflowOptions};
 
-mod workflow;
 mod engines;
+mod workflow;
 
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]

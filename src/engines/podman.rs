@@ -1,10 +1,9 @@
+use log::debug;
 /// Podman container engine
-
 use std::collections::{HashMap, HashSet};
-use log::{debug};
 use std::process::Command;
 
-use crate::engines::{ImageOps, VolumeOps, ContainerOps};
+use crate::engines::{ContainerOps, ImageOps, VolumeOps};
 use crate::workflow::{Container, WorkflowOptions};
 
 pub struct Podman;
@@ -43,7 +42,6 @@ impl ImageOps for Podman {
 }
 
 impl VolumeOps for Podman {
-
     fn prepare_volume(&self, name: &str, opts: &WorkflowOptions) -> Result<(), String> {
         let mut podman = Command::new("podman");
         let cmd = podman.args(["volume", "exists", name]);
@@ -54,7 +52,7 @@ impl VolumeOps for Podman {
                     if status.success() {
                         return Ok(());
                     }
-                },
+                }
                 Err(e) => {
                     return Err(e.to_string());
                 }
@@ -84,7 +82,6 @@ impl VolumeOps for Podman {
         }
         Ok(())
     }
-
 }
 
 impl ContainerOps for Podman {
@@ -101,7 +98,7 @@ impl ContainerOps for Podman {
             for v in container.volumes.as_ref().unwrap() {
                 let src = v.split(":").take(1).collect::<Vec<_>>()[0];
                 match self.prepare_volume(src, opts) {
-                    Ok(()) => {},
+                    Ok(()) => {}
                     Err(e) => {
                         return Err(e);
                     }

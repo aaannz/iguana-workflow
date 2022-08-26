@@ -1,5 +1,4 @@
 /// Container engines traits
-
 use std::collections::{HashMap, HashSet};
 
 use crate::workflow::{Container, WorkflowOptions};
@@ -21,6 +20,7 @@ pub trait ContainerOps {
         container: &Container,
         is_service: bool,
         env: HashMap<String, String>,
-        opts: &WorkflowOptions) -> Result<(), String>;
+        opts: &WorkflowOptions,
+    ) -> Result<(), String>;
     fn stop_container(&self, name: &str, opts: &WorkflowOptions) -> Result<(), String>;
 }

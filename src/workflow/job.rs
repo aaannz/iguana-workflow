@@ -59,7 +59,7 @@ fn do_job(
                 if s_container.env.is_some() {
                     merge_from_ref(&mut env, s_container.env.as_ref().unwrap());
                 }
-                match  engine.run_container(s_container, true, env, opts) {
+                match engine.run_container(s_container, true, env, opts) {
                     Ok(()) => debug!("Service '{}' started", s_name),
                     Err(e) => {
                         error!("Service container '{}' start failed: {}", s_name, e);
@@ -101,7 +101,6 @@ fn do_job(
 }
 
 fn clean_job(job: &Job, opts: &WorkflowOptions) -> Result<(), String> {
-
     let engine = Podman;
     // Collect volumes through cleanup so we can removed them at the end
     let mut volumes = HashSet::new();
