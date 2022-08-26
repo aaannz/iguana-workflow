@@ -40,6 +40,7 @@ pub struct Job {
 #[derive(Deserialize)]
 pub struct Workflow {
     name: Option<String>,
+    description: Option<String>,
     jobs: LinkedHashMap<String, Job>,
     env: Option<HashMap<String, String>>,
 }
@@ -71,7 +72,7 @@ pub fn do_workflow(workflow: String, opts: &WorkflowOptions) -> Result<(), Strin
     let job_results = job::do_jobs(jobs, HashMap::new(), &yaml.env, opts);
 
     match job_results {
-        Ok(_) => info!("Workflow ran successfuly"),
+        Ok(_) => info!("Workflow ran successfully"),
         Err(e) => return Err(e),
     };
     Ok(())
