@@ -1,11 +1,13 @@
 /// Implementation of job execution
 use std::collections::{HashMap, HashSet};
-use std::process::Command;
 
 use linked_hash_map::LinkedHashMap;
 use log::{debug, error, warn};
 
-use crate::workflow::{Container, Job, WorkflowOptions};
+use crate::engines::{ContainerOps, ImageOps, VolumeOps};
+use crate::workflow::{Job, WorkflowOptions};
+
+use crate::engines::podman::Podman;
 
 /// Available results of container run
 #[derive(PartialEq)]
@@ -18,117 +20,6 @@ pub enum JobStatus {
 
 fn merge_from_ref(map: &mut HashMap<String, String>, map2: &HashMap<String, String>) {
     map.extend(map2.into_iter().map(|(k, v)| (k.clone(), v.clone())));
-}
-
-fn prepare_image(image: &String, dry_run: bool) -> Result<(), String> {
-    let mut podman = Command::new("podman");
-    let cmd = podman.args(["image", "pull", "--tls-verify=false", "--", image]);
-
-    debug!("{cmd:?}");
-    if !dry_run {
-        if let Err(e) = cmd.status() {
-            return Err(e.to_string());
-        }
-    }
-    Ok(())
-}
-
-/// Clean container images
-fn clean_image(image: &String, opts: &WorkflowOptions) -> Result<(), String> {
-    if opts.debug {
-        debug!("Not cleaning job image {image} because of debug option");
-        return Ok(());
-    }
-
-    let mut podman = Command::new("podman");
-    let cmd = podman.args(["image", "rm", "--force", "--", image]);
-
-    debug!("{cmd:?}");
-    if !opts.dry_run {
-        if let Err(e) = cmd.status() {
-            return Err(e.to_string());
-        }
-    }
-    Ok(())
-}
-
-fn run_container(
-    container: &Container,
-    is_service: bool,
-    env: HashMap<String, String>,
-    opts: &WorkflowOptions,
-) -> Result<(), String> {
-    // Prepare volumes if specified
-    let mut volumes = Vec::new();
-    if container.volumes.is_some() {
-        for v in container.volumes.as_ref().unwrap() {
-            let src = v.split(":").take(1).collect::<Vec<_>>()[0];
-            let mut podman = Command::new("podman");
-            let cmd = podman.args(["volume", "create", src]);
-            debug!("{cmd:?}");
-
-            if !opts.dry_run {
-                if let Err(e) = cmd.status() {
-                    return Err(e.to_string());
-                }
-            }
-            volumes.push(format!("--volume={v}"));
-        }
-    }
-    // Run the container
-    let mut podman = Command::new("podman");
-    let mut cmd = podman.args([
-        "run",
-        "--network=host",
-        "--annotation=iguana=true",
-        "--env=iguana=true",
-        "--mount=type=bind,source=/iguana,target=/iguana",
-    ]);
-
-    if opts.privileged {
-        cmd = cmd.args(["--volume=/dev:/dev", "--privileged"]);
-    }
-
-    if !volumes.is_empty() {
-        cmd = cmd.args(volumes);
-    }
-
-    if !is_service {
-        cmd = cmd.args(["--tty", "--interactive"]);
-    } else {
-        cmd = cmd.arg("--detach");
-    }
-
-    if !opts.debug {
-        cmd = cmd.arg("--rm");
-    }
-
-    for (k, v) in env.iter() {
-        cmd.arg(format!("--env={}={}", k, v));
-    }
-
-    cmd = cmd.args(["--", &container.image]);
-
-    debug!("{cmd:?}");
-    if !opts.dry_run {
-        if let Err(e) = cmd.status() {
-            return Err(e.to_string());
-        }
-    }
-    Ok(())
-}
-
-fn stop_container(name: &String, opts: &WorkflowOptions) -> Result<(), String> {
-    let mut podman = Command::new("podman");
-    let cmd = podman.args(["container", "stop", "--ignore", "--", name]);
-
-    debug!("{cmd:?}");
-    if !opts.dry_run {
-        if let Err(e) = cmd.status() {
-            return Err(e.to_string());
-        }
-    }
-    Ok(())
 }
 
 fn do_job(
@@ -144,11 +35,13 @@ fn do_job(
     }
     debug!("Running job {}", name);
     let mut services_ok = true;
+
+    let engine = Podman;
     // Prepare and run services
     match &job.services {
         Some(services) => {
             for (s_name, s_container) in services.iter() {
-                match prepare_image(&s_container.image, opts.dry_run) {
+                match engine.prepare_image(&s_container.image, opts.dry_run) {
                     Ok(()) => (),
                     Err(e) => {
                         error!(
@@ -166,7 +59,7 @@ fn do_job(
                 if s_container.env.is_some() {
                     merge_from_ref(&mut env, s_container.env.as_ref().unwrap());
                 }
-                match run_container(s_container, true, env, opts) {
+                match  engine.run_container(s_container, true, env, opts) {
                     Ok(()) => debug!("Service '{}' started", s_name),
                     Err(e) => {
                         error!("Service container '{}' start failed: {}", s_name, e);
@@ -183,7 +76,7 @@ fn do_job(
     }
 
     // Start main job
-    match prepare_image(image, opts.dry_run) {
+    match engine.prepare_image(image, opts.dry_run) {
         Ok(()) => (),
         Err(e) => return Err(format!("Preparation of container '{}' failed: {}", name, e)),
     }
@@ -197,7 +90,7 @@ fn do_job(
         let e = job.container.env.as_ref().unwrap();
         merge_from_ref(&mut env, e);
     }
-    match run_container(&job.container, false, env, opts) {
+    match engine.run_container(&job.container, false, env, opts) {
         Ok(()) => debug!("Job container '{}' started", image),
         Err(e) => {
             return Err(format!("Job container '{}' start failed: {}", image, e));
@@ -208,20 +101,22 @@ fn do_job(
 }
 
 fn clean_job(job: &Job, opts: &WorkflowOptions) -> Result<(), String> {
-    // Collect volumes throught cleanup so we can removed them at the end
+
+    let engine = Podman;
+    // Collect volumes through cleanup so we can removed them at the end
     let mut volumes = HashSet::new();
     // Stop service containers
     match &job.services {
         Some(services) => {
             for (s_name, s_container) in services.iter() {
-                match stop_container(&s_container.image, opts) {
+                match engine.stop_container(&s_container.image, opts) {
                     Ok(()) => debug!("Service container '{s_name}' stopped"),
                     Err(e) => {
                         error!("Stopping of service container '{s_name}' failed: {e}");
                     }
                 }
 
-                match clean_image(&s_container.image, opts) {
+                match engine.clean_image(&s_container.image, opts) {
                     Ok(()) => debug!("Service '{s_name}' image cleaned"),
                     Err(e) => {
                         error!("Service container '{s_name}' cleanup failed: {e}");
@@ -247,20 +142,16 @@ fn clean_job(job: &Job, opts: &WorkflowOptions) -> Result<(), String> {
     }
 
     if !volumes.is_empty() {
-        let mut podman = Command::new("podman");
-        let mut cmd = podman.args(["volume", "remove"]);
-        cmd = cmd.args(volumes);
-
-        debug!("{cmd:?}");
-        if !opts.dry_run {
-            if let Err(e) = cmd.status() {
-                return Err(e.to_string());
+        match engine.clean_volumes(&volumes, opts) {
+            Ok(()) => debug!("Container volumes removed"),
+            Err(e) => {
+                error!("Container volume cleanup failed: {e}");
             }
         }
     }
 
     // Clean images
-    return clean_image(&job.container.image, opts);
+    return engine.clean_image(&job.container.image, opts);
 }
 
 /// Analyze "jobs" key of workflow and execute jobs in order

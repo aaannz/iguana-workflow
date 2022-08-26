@@ -9,6 +9,7 @@ use std::process::exit;
 use crate::workflow::{do_workflow, WorkflowOptions};
 
 mod workflow;
+mod engines;
 
 #[derive(Parser, Debug)]
 #[clap(version, about, long_about = None)]
@@ -66,7 +67,7 @@ fn main() {
         error!("{}", e);
         exit(1);
     } else {
-        info!("Iguana workflow finished successfuly");
+        info!("Iguana workflow finished successfully");
         exit(0);
     }
 }

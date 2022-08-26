@@ -11,9 +11,9 @@ mod job;
 /// Container
 #[derive(Deserialize)]
 pub struct Container {
-    image: String,
-    env: Option<HashMap<String, String>>,
-    volumes: Option<Vec<String>>,
+    pub image: String,
+    pub env: Option<HashMap<String, String>>,
+    pub volumes: Option<Vec<String>>,
 }
 
 /// Step
