@@ -1,4 +1,6 @@
-# Iguana workflow
+# This repository was merged into [Iguana](https://github.com/openSUSE/iguana) and obsoleted.
+
+## Iguana workflow
 
 _part of [Iguana installer research project](https://github.com/aaannz/iguana)._
 
